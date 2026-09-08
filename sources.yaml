@@ -1,0 +1,45 @@
+# Liste des sources surveillées quotidiennement.
+# Vous pouvez en ajouter / retirer librement sans toucher au code.
+#
+# type possibles :
+#   - nvd_cve        : recherche de CVE sur le NVD (NIST) par mot-clé -> vulnérabilités
+#   - html_links      : scrape une page HTML et détecte les nouveaux liens/bulletins
+#   - github_releases : nouvelles releases d'un repo GitHub -> nouveautés / versions
+#   - rss             : n'importe quel flux RSS/Atom -> articles, annonces, blog
+
+sources:
+
+  - id: nvd_cve_magento
+    type: nvd_cve
+    label: "CVE NVD - Magento"
+    keyword: "Magento"
+
+  - id: nvd_cve_adobe_commerce
+    type: nvd_cve
+    label: "CVE NVD - Adobe Commerce"
+    keyword: "Adobe Commerce"
+
+  - id: adobe_security_bulletin_index
+    type: html_links
+    label: "Bulletins de sécurité Adobe (Magento/Commerce)"
+    url: "https://helpx.adobe.com/security/products/magento.html"
+    # motif des liens à retenir (bulletins APSBxx-xxx)
+    link_pattern: "apsb"
+
+  - id: github_magento2_releases
+    type: github_releases
+    label: "Releases GitHub magento/magento2"
+    repo: "magento/magento2"
+
+  - id: magento_devblog_rss
+    type: rss
+    label: "Magento DevBlog (community.magento.com)"
+    # ⚠️ à vérifier/ajuster : ouvrez la page DevBlog, cliquez sur
+    # "Subscribe to RSS Feed" et collez l'URL exacte ici.
+    url: "https://community.magento.com/t5/Magento-DevBlog/bg-p/devblog/rss"
+
+  # Exemple pour ajouter facilement d'autres flux RSS (blogs, agrégateurs, etc.)
+  # - id: mon_flux_perso
+  #   type: rss
+  #   label: "Mon flux"
+  #   url: "https://exemple.com/feed.xml"
