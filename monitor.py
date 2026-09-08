@@ -305,8 +305,10 @@ def main():
     def _within_window(h):
         try:
             d = datetime.fromisoformat(h["date"].replace("Z", "+00:00"))
-        except (ValueError, KeyError):
+        except (ValueError, KeyError, TypeError, AttributeError):
             return True
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc)
         return d >= cutoff
 
     history = [h for h in history if _within_window(h)]
