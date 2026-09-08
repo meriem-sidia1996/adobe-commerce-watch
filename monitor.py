@@ -18,7 +18,7 @@ import os
 import re
 import smtplib
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -32,6 +32,7 @@ except ImportError:
 
 STATE_FILE = os.environ.get("STATE_FILE", "state.json")
 SOURCES_FILE = os.environ.get("SOURCES_FILE", "sources.yaml")
+DIGEST_FILE = os.environ.get("DIGEST_FILE", "latest_digest.json")
 USER_AGENT = "adobe-commerce-watch-bot/1.0 (+daily security & release watcher)"
 TIMEOUT = 20
 
@@ -216,7 +217,7 @@ def build_email_body(new_items_by_source):
 
 def send_email(subject, html_body):
     host = os.environ["SMTP_HOST"]
-    port = int(os.environ.get("SMTP_PORT", "587"))
+    port = int(os.environ.get("SMTP_PORT") or "587")
     user = os.environ["SMTP_USER"]
     password = os.environ["SMTP_PASS"]
     mail_from = os.environ.get("MAIL_FROM", user)
@@ -270,6 +271,50 @@ def main():
 
     save_state(state)
 
+    # Historique cumulatif (et non plus "juste les nouveautés du jour") pour que
+    # l'app React puisse le lire directement via l'URL brute GitHub, sans jamais
+    # dépendre du fait qu'on ait ouvert l'app le jour précis où un item est sorti.
+    history = []
+    if os.path.exists(DIGEST_FILE):
+        try:
+            with open(DIGEST_FILE, "r", encoding="utf-8") as f:
+                history = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            history = []
+
+    existing_keys = {(h.get("link") or h.get("title"), h.get("source")) for h in history}
+    for label, items in new_items_by_source.items():
+        for it in items:
+            key = (it["link"] or it["title"], label)
+            if key in existing_keys:
+                continue
+            history.append(
+                {
+                    "title": it["title"],
+                    "summary": it["summary"],
+                    "link": it["link"],
+                    "date": it["date"] or datetime.now(timezone.utc).isoformat(),
+                    "source": label,
+                }
+            )
+            existing_keys.add(key)
+
+    # Fenêtre glissante de 120 jours pour ne pas faire grossir le fichier indéfiniment.
+    cutoff = datetime.now(timezone.utc) - timedelta(days=120)
+
+    def _within_window(h):
+        try:
+            d = datetime.fromisoformat(h["date"].replace("Z", "+00:00"))
+        except (ValueError, KeyError):
+            return True
+        return d >= cutoff
+
+    history = [h for h in history if _within_window(h)]
+    history.sort(key=lambda h: h.get("date", ""), reverse=True)
+
+    with open(DIGEST_FILE, "w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
+
     if errors:
         print("Avertissements :", file=sys.stderr)
         for e in errors:
@@ -288,8 +333,24 @@ def main():
         print(body)
         return
 
-    send_email(subject, body)
-    print(f"Email envoyé : {total_new} nouveauté(s).")
+    required_smtp_vars = ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "MAIL_TO"]
+    missing = [v for v in required_smtp_vars if not os.environ.get(v)]
+    if missing:
+        print(
+            "Email non envoyé (variables manquantes : "
+            + ", ".join(missing)
+            + "). Le digest JSON a bien été généré/mis à jour.",
+            file=sys.stderr,
+        )
+        return
+
+    try:
+        send_email(subject, body)
+        print(f"Email envoyé : {total_new} nouveauté(s).")
+    except Exception as exc:
+        # On ne fait jamais échouer le job pour un souci d'email : le digest
+        # JSON (déjà écrit plus haut) doit être commité même si l'email plante.
+        print(f"Échec de l'envoi d'email : {exc}", file=sys.stderr)
 
 
 if __name__ == "__main__":
