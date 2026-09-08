@@ -301,17 +301,14 @@ def main():
 
     # Fenêtre glissante de 120 jours pour ne pas faire grossir le fichier indéfiniment.
     cutoff = datetime.now(timezone.utc) - timedelta(days=120)
-   
+
     def _within_window(h):
         try:
-        d = datetime.fromisoformat(h["date"].replace("Z", "+00:00"))
-        # Ensure d is timezone-aware (add UTC if naive)
-        if d.tzinfo is None:
-            d = d.replace(tzinfo=timezone.utc)
+            d = datetime.fromisoformat(h["date"].replace("Z", "+00:00"))
         except (ValueError, KeyError):
-        return True
+            return True
         return d >= cutoff
-    
+
     history = [h for h in history if _within_window(h)]
     history.sort(key=lambda h: h.get("date", ""), reverse=True)
 
