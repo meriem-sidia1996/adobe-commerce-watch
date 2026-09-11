@@ -33,6 +33,7 @@ jobs:
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
           GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: python monitor.py
 
       - name: Sauvegarder l'état (state.json + latest_digest.json)
