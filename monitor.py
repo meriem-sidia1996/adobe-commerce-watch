@@ -59,11 +59,21 @@ def item_id(*parts):
 # ---------------------------------------------------------------------------
 
 def fetch_nvd_cve(source):
-    """Interroge l'API NVD 2.0 par mot-clé et renvoie les CVE trouvées."""
+    """Interroge l'API NVD 2.0 par mot-clé et renvoie les CVE trouvées.
+
+    Sans clé API, le NVD limite fortement (voire bloque avec un 403) les
+    requêtes anonymes, en particulier depuis des IP partagées comme celles
+    des runners GitHub Actions. Une clé gratuite lève cette limite :
+    https://nvd.nist.gov/developers/request-an-api-key
+    Définissez-la dans le secret GitHub NVD_API_KEY (optionnel).
+    """
     keyword = source["keyword"]
     url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
     params = {"keywordSearch": keyword, "resultsPerPage": 50}
     headers = {"User-Agent": USER_AGENT}
+    api_key = os.environ.get("NVD_API_KEY")
+    if api_key:
+        headers["apiKey"] = api_key
     resp = requests.get(url, params=params, headers=headers, timeout=TIMEOUT)
     resp.raise_for_status()
     data = resp.json()
@@ -97,10 +107,26 @@ def fetch_html_links(source):
     """Scrape une page HTML et remonte les liens correspondant au motif défini."""
     url = source["url"]
     pattern = source.get("link_pattern", "").lower()
-    headers = {"User-Agent": USER_AGENT}
-    resp = requests.get(url, headers=headers, timeout=TIMEOUT)
-    resp.raise_for_status()
-    html = resp.text
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9,fr;q=0.8",
+    }
+    last_exc = None
+    html = None
+    for attempt in range(2):
+        try:
+            resp = requests.get(url, headers=headers, timeout=30)
+            resp.raise_for_status()
+            html = resp.text
+            break
+        except requests.RequestException as exc:
+            last_exc = exc
+    if html is None:
+        raise last_exc
 
     # Extraction simple des liens <a href="...">texte</a>
     link_re = re.compile(r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL)
